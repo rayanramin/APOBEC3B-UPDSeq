@@ -12,9 +12,10 @@ _4-_ Department of Biochemistry, Microbiology and Immunology, Wayne State Univer
 #### [(BioRxiv: DOI: 10.1101/2023.08.01.551518)](10.1101/2023.08.01.551518)
 ________
 
-### Analysis of Uracils Created by human APOBEC3A and APOBEC3B*
+## Analysis of Uracils Created by human APOBEC3A and APOBEC3B*
 
-#### Samples.xlsx :  lists of all of the samples and their accession numbers.
+**Step1: Download the raw sequences using the provided accession numbers.<br>**
+##### Samples.xlsx :  lists of all of the samples and their accession numbers.
 
 **Four APOBEC3A samples are already published <br>**
 A3A_F6&emsp;SRR6924522&emsp;PRJNA448166<br>
@@ -24,11 +25,9 @@ A3A_G&emsp;SRR17822877&emsp;PRJNA801888<br>
 **New samples**<br>
 3 A3B-CTD + 3 Empty vector control samples<br>
 6 A3B-full + 6 Empty vector control samples
-________
-**BH214 strain of E. _coli_ is used in the experiments.<br>The reference genome used for the analysis is BH214V4.fa available inside the BH214_genome_files directory.<br><br>
-Step1: Download the raw sequences using the provided accession numbers.<br>
-Step2: Sequence alignment on and extracting the depth of coverage and the nucleotide counts tables.<br>**
-
+______
+**Step2: Sequence alignment on and extracting the depth of coverage and the nucleotide counts tables.<br>**
+**The reference sequences are available inside the BH214_genome_files directory.<br><br>**
 ```
 # <ref.fa> is the reference genome (BH214V.fa)
 # <plasmid_seq.fa> is the plasmid sequence (A3B_plasmids.fa)
@@ -54,5 +53,50 @@ samtools depth -aa -m 100000 <sample.BH214.bam> ><sample.BH214.depth>
 
 **Step3: Follow the instructions in Analysis.R to reproduce the analysis and create the Plots.**
 ________
+## Hairpin Signature Analysis
+**Run the Hairpin Signature Analysis in MATLAB<br>**
+**The MATLAB code is available at Hairpin_analysis.m inside the Hairpin_Signature_Analysis folder<br>**
+***Dependency functions are available at the Hairpin_Signature_Analysis folder<br>**
+***samtools must be available at the system level<br>** 
 
+```
+## in bash:
+$ samtools --version  ## make sure samtools is available
+$ matlab -nodesktop
 
+## in MATLAB:
+addpath(cd /path/to/matlab_functions/Hairpin_Signature_Analysis)
+% load the mutations
+>> M = load_struct('./Test_Mutations.txt');
+>> M.pos = str2double(M.pos); 
+>> M.chr(strcmp(M.chr,'23'))={'X'}; 
+>> M.chr(strcmp(M.chr,'24'))={'Y'};
+
+% get the hairpin info for mutations
+>> ref_fasta =  '/path/to/refernece/sequence/such/as/Homo_sapiens_assembly19.fasta';
+>> Hairpins = get_hairpin_info(M,ref_fasta); % about 40 minutes for test mutations
+
+% Hairpin Signature analysis
+>> Hairpins.pat_id = arrayfun(@(x) str2num(x{1}), Hairpins.pat_id);
+>> HSA = hairpin_signature_analysis(Hairpins,true); %% second argument for filtering only TpC sites.
+>> pr(HSA.pat)
+% pat_id hs1   hs2   log2R   judgement
+% 1      0.046 0.037 0.33    A3A-like 
+% 2      0.014 0.021 -0.56   A3B-like 
+% 13     0.019 0.019 -0.0039 -        
+% 14     0.020 0.021 -0.051  A3B-like 
+% 50     0.061 0.043 0.51    A3A-like 
+
+% save the output to a text file
+>> save_struct(HSA.pat, 'Hairpin_Analysis.txt')
+
+```
+<br>
+
+**Note:** <br>
+For large number of mutations it's faster to servey the entire genome for hairpins.<br>
+Then map the mutations to the hairpins sites and extract looplen, looppos and ss values.<br>
+See https://github.com/alangenb/ApoHP for genome hairpin analysis tool
+
+________________
+### If you have any questions regarding the article or the code behind it, please contact the corresponding author or Ramin Sakhtemani rsakhtemani (at) mgh.harvard.edu
