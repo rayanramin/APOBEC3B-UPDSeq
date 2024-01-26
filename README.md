@@ -75,7 +75,7 @@ _alt:_ alternative sequence, numeric : A/C/G/T or 1/2/3/4<br><br>
 ***Alternatively, one can extract the hairpin informations from the output of ApoHP tool<br>**
 ***Dependency functions are available at the Hairpin_Signature_Analysis folder<br>**
 
-### Try the functions on the test mutations:<br>
+##### Try these functions on the Test_Mutations:<br>
 
 ```
 ## in bash:
