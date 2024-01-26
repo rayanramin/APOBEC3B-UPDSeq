@@ -1,49 +1,20 @@
 #### This is the main code for the analysis and plotting of the data
-
 ## Samples.xlsx lists of all of the used Samples and their accession numbers
-
-## 4 A3A samples are already published 
-# A3A_F6 SRR6924522	PRJNA448166 
-# A3A_H1 SRR9864913	PRJNA448166
-# A3A_A SRR17822878	PRJNA801888
-# A3A_G SRR17822877	PRJNA801888
-
-## 3 A3B-CTD + 3 Empty vector control samples
-## 6 A3B-full + 6 Empty vector control samples
-
-## ==> run the alignment and bam-readcount for the samples
-# bam-readcount -w0 -f <ref.fa> <bam_file> | \
-# awk -F ":|\t|=" 'BEGIN {OFS = "\t"}; {print $1, $2, $3 , $4, $21 , $35, $49 , $63}' > out.txt
+## Download the raw fastq files using the accession numbers in Samples.xlsx
+## run the alignment, extract the depth of coverage and the nucleotide counts for the samples
+## Follow this code to reproduce the analysis and the figures
 
 ############################################
 ##########      NDC2 Analysis     ##########
 ############################################
-
-# ## Sequence Alignment and extraction of depth of coverage
-
-# # Load necessary modules
-# module load samtools/1.9 bedtools/2.25.0 r/3.2.3 bwa/0.7.17 bamtools/2.5.1
-# # Index reference DNA files
-# bwa index -p gen_ref ./BH214V4.fa
-# bwa index -p plas_ref ./plasmid_reference.fa
-# # Align and exclude vector-aligned reads
-# bwa mem -t 4 plas_ref ./data/fastq/A3B-I-3/A3BS3R1.fastq.gz ./data/fastq/A3B-I-3/A3BS3R2.fastq.gz | samtools view -b -f 12 -o plas_excl_align_A3BI3.bam
-# samtools sort -n -l 6 -@ 4 plas_excl_align_A3BI3.bam -o plas_excl_sort_A3BI3.bam
-# # Convert BAM to FASTQ 
-# bedtools bamtofastq -i plas_excl_sort_A3BI3.bam -fq plas_excl_A3BI3_R1.fq -fq2 plas_excl_A3BI3_R2.fq
-# # Align reads to genomic DNA
-# bwa mem -t 4 gen_ref plas_excl_A3BI3_R1.fq plas_excl_A3BI3_R2.fq | samtools view -b -o A3BI3.aligned.bam
-# samtools sort -l 6 -@ 4 A3BI3.aligned.bam -o A3BI3.sort.bam
-# # Extract depth of coverage
-## note, it's important to use the -aa option
-# samtools depth -aa -m 100000 A3BI3.sort.bam > A3BI3.depth
-
 ### Example: A3BI3 vs Negative control EVI3
 
-### Import depth of coverage files to R
+
+devtools::install_github("rayanramin/RamPack")
 library(RamPack)
 indir <- "/Path/to/depth/files/"
 
+### Import depth of coverage files to R
 list.files(indir,pattern=".depth",full.names = T)
 # "A3BI3","EVI3"
 
@@ -53,7 +24,7 @@ EVI3_DEPTH <- read.table(paste0(indir,"EVI3.depth"),col.names=c("Chr", "POS", "C
 # Calculate NDC2 and five sigma standard deviation (FSD) for data and plot it
 w = 1e5 ; b = 1e4 ; mavn = 120;
 A3BI3_DEPTH$NDC <- RamPack::NDC(x = A3BI3_DEPTH$COV, y = EVI3_DEPTH$COV, w = w, b = b, mavn = mavn,NDC_Version=2)
-
+# 5 sigma standard deviation as threshold
 FSD <- sd(A3BI3_DEPTH$NDC, na.rm=TRUE)*5
 
 ### plot NDC
@@ -106,7 +77,7 @@ fixSPD(x=T_SPD,"BH214") -> T_SPD
 write.table(T_SPD, paste0(topdir,"A3BI3_NDC2",".peaks.bed"), quote=F, sep="\t", row.names=F, col.names=F)
 #########
 # Annotation 
-annotations <- read.table(paste0(topdir,"BH214.gff"), sep="\t") #import list of annotations
+annotations <- read.table(paste0("path/to/BH214_genome_files/directory/BH214.gff"), sep="\t") #import list of annotations
 ## bedtools is required for this step
 j <- bedTools.2in("bedtools intersect", annotations,T_SPD)
 ## save the list of overlapping genes
@@ -124,7 +95,7 @@ write.table(j, paste(topdir, "A3BI3_NDC2",".genes.txt", sep="_"), quote=F, sep="
 
 ### Figure 1A (Barcode plot for A3A, A3B-CTD and A3B-full intersect uracil peaks)
 
-indir <- "/path/to/bed/files/"
+indir <- "/path/to/bed/files/" # "/Uracilation_Peaks_bed/"
 # import the intersection of uracilation peaks
 # common peaks in A3B_full
 A3B_FULL <- read.delim(paste0(indir,"intersect123A3Bfull.bed"), header = FALSE)
@@ -169,12 +140,15 @@ ggsave(filename= paste0(outdir,"Fig1A_Barcode.pdf"),plot=g.1a, height = 4, width
 
 
 
-############################################
+########################################################################################
+##################           Uracilation Index Analysis          #######################
+########################################################################################
 # For the Uracilation Index analysis 3 data.frames are needed:
 # 1. Samples: a data.frame listing the samples
 # 2. X: a data.frame containing the uracilation fractions for all positions in all samples
-# 3. POSData: result of survey-hairpin on BH214 genome #  Result out of ApoHP (https://github.com/alangenb/ApoHP) 
-############################################
+# 3. POSData: result of survey-hairpin on BH214 genome 
+#   #3 is Result out of ApoHP (https://github.com/alangenb/ApoHP) # BH214_genome_files/AllC_BH214.txt.gz  
+########################################################################################
 # 1- list of  samples
 Samples <- data.frame(
 	stype=c(rep("A3A",4),rep("A3B_CTD",3),rep("A3B_full",6),rep("EV",9)),
@@ -237,12 +211,13 @@ POSData$ssGroup <-  cut(POSData$ss , breaks=c(-1,7,9,11,13,15,17,19,Inf), labels
 POSData %>% {ifelse( .$ref == "2" , 1 , -1 )} -> POSData$strand
 POSData %>% {ifelse((.$POS > 1664141 & .$POS < 3906549 ), "Left", "Right" )} %>% as.factor() -> POSData$Replication
 POSData %>% {ifelse(((.$Replication == "Right" & .$strand == 1) | (.$Replication == "Left" & .$strand == -1)), "LGST" , "LDST")} %>% as.factor() -> POSData$LDLGST
-########
+##############################################
 ### save the data
 save(Samples,X,POSData,file=paste0(topdir,"Uracilation_Data.RData"))
+### This is the data used for all of the analysis and plotting
 ##############################################
+## Now Let's Perform the analysis
 ##############################################
-## Perform the analysis
 load(paste0(topdir,"Uracilation_Data.RData"))
 library(dplyr); library(stringr); library(tidyr);
 library(RamPack);library(ggplot2);library(Rmisc);
@@ -300,10 +275,6 @@ get_hairpin_seq <- function(D,REF=BH214$BH214V4, stem_length=1, onlyLoop=FALSE){
 }
 
 
-
-#############
-# Analysis and plotting
-##############
 
 ####################################################################################
 ### Figure 1B
@@ -969,289 +940,278 @@ ggsave(filename= paste0(outdir,"Fig3D_HP55_newcolors_normalized.pdf"),plot=g.3d,
 
 ####################################################################################
 ####################################################################################
-### Figure 4
+#### Figure 4
 
-A3A_colors <- c("#1b4499", "#82aefd") #  A3A colors
-A3B_colors <- c("#f6530d", "#feb88d") #  A3B colors
+filter(POSData , looplen %in% 3:5 & looppos >0 & looppos <= looplen & ss >= 10) -> POSX 
+POSX %<>% mutate(loopseq = get_hairpin_seq(.,onlyLoop=T))
+###
+group_by(POSX,looplen,looppos,loopseq) %>% 
+dplyr::summarise(n_total = n()) -> SX 
+###
+select(POSX, POS, looplen, looppos, loopseq) %>% 
+left_join(filter(X , U < 0.8))  %>% 
+left_join(.,Samples, by="samp") -> POSX_U
+###
+filter(POSX_U, stype != "EV") %>% 
+summarySE(., measurevar="U", groupvars=c("stype","samp_rep","loopseq")) %>% 
+mutate( UI = U*1e3) %>% 
+summarySE(., measurevar="UI", groupvars=c("stype","loopseq")) %>% 
+left_join(.,SX, by="loopseq") %>% filter(n_total>=5) -> LOOPS_UI
+######### import in vitro deamination data
+topdir <- "/data/rama/labMembers/Ramin/Ashok/2023_A3B_manuscript/"
+geldata <- read.table(paste0(topdir,"Figure4_data_3replicates.txt"),header=T) 
+geldata$loopseq <- paste0("(",geldata$loopseq,")")
+######### normalize within each replicate
+## normalize within each gel by mean activity 
+group_by(geldata,stype, replicate) %>%
+dplyr::summarise(norm_factor = mean(activity)) %>%
+	left_join(geldata,.) %>%
+	mutate(norm_activity = activity*100/norm_factor)  -> tmp
+## find the mean of TTTC for A3A and A3B
+tmp  %>% filter(stype=="A3A" & loopseq=="(TTT.C.)") %>% pull(norm_activity) %>% mean -> TTTC_A3A_norm_activity
+tmp  %>% filter(stype=="A3B_CTD" & loopseq=="(TTT.C.)") %>% pull(norm_activity) %>% mean -> TTTC_A3B_norm_activity
+## normalize by the mean of TTTC for A3A and A3B
+mutate(tmp, normalized_activity = ifelse(stype=="A3A",
+					norm_activity*100/TTTC_A3A_norm_activity,
+                    norm_activity*100/TTTC_A3B_norm_activity)) %>%
+group_by(stype, loopseq) %>%
+dplyr::summarise(value = mean(normalized_activity)) %>%
+mutate(var = "Activity") -> GelData_fig4_TTTC_normalized
+#########
+LOOPS_UI %>%
+  filter(stype%in% c("A3A","A3B_CTD"),
+  loopseq %in% GelData_fig4_TTTC_normalized$loopseq) %>% 
+  select(stype,loopseq,value=UI) %>%
+  mutate(var = "Uracilation") %>% 
+  rbind(GelData_fig4_TTTC_normalized,.) -> Pdata.4de
+#########
+## color palette
+A3A_colors <- c("#a00610", "#c4877c") #  A3A colors
+A3B_colors <- c("#0744b2", "#85bde5") #  A3B colors
+## figures theme
+fig4theme <- theme(
+  axis.title.x = element_text(size = 40,hjust = 0.5, vjust = 0.6,
+                            margin = margin(t = 0.7, r = 1, b = 0, l = 1, unit = "cm")),
+  axis.text.x = element_text(size= 35,color="black",angle = 0, hjust = 0.4, vjust = 0.5),
+  axis.title.y.left = ggtext::element_markdown(margin = margin(t = 0, r = 0.5, b = 0, l = 0, unit = "cm")),
+  axis.title.y.right = element_text(size = 35, margin = margin(t = 0, r = 0.5, b = 0, l = 0, unit = "cm"), vjust = 4), 
+  axis.text.y = element_text(size = 35,face= "bold", color="black"),
+  legend.position = "top",
+  legend.text = element_text(size = 30),
+  legend.background = element_blank(),
+  legend.margin = margin(t = 1, r = 0, b = 1, l = 1, unit = "cm"), 
+  plot.title = element_text(size=45, hjust = 0.5, vjust = 2.5,
+                          margin = margin(t = 1, r = 5, b = 0, l = 0, unit = "cm")),
+  plot.margin = margin(t = 0, r = 3, b = 2.5, l = 1, unit = "cm")) 
+############################################################
+####### Fig.4D
 
 ### 4L HPL A3A
-data.frame(Sample = factor(c("(TGT.C.)","(TTT.C.)","(GTT.C.)"),levels=c("(TGT.C.)","(TTT.C.)","(GTT.C.)")),
-Activity = c(2.9,64.3,85.7)) -> data
-mapacross(data$Sample,LOOPS_UI$loopseq[LOOPS_UI$stype=="A3A"],LOOPS_UI$UI[LOOPS_UI$stype=="A3A"]) -> data$Uracilation
-data -> data1
-normR = max(data$Activity)/max(data$Uracilation)
-data %<>% mutate(Uracilation = Uracilation*normR) %>%
-  gather(key = "var", value = "vals", -Sample)
 plot_title <- "4L HPL"
-
-
-ggplot(data,aes(x = Sample, y = vals, fill = var)) +
-geom_col(position = "dodge", color = "black", show.legend = TRUE) +
-scale_fill_manual(values = A3A_colors) +
-scale_y_continuous(expand = c(0, 0), breaks= seq(0, max(data$vals) *0.95, by = 20),
-sec.axis = sec_axis(trans = ~./normR  , name = "Uracilation")) +
+filter(Pdata.4de, loopseq %in% c("(TGT.C.)","(TTT.C.)","(GTT.C.)") & stype=="A3A") %>%
+mutate(loopseq= factor(loopseq,levels=c("(TGT.C.)","(TTT.C.)","(GTT.C.)"))) -> data1 -> data_4dA3A 
+normRA4_1 = max(data_4dA3A$value[data_4dA3A$var=="Activity"])/max(data_4dA3A$value[data_4dA3A$var=="Uracilation"])  ## to adjust the scale of the right axis
+mutate(data_4dA3A, value = {ifelse(var=="Uracilation", value*normRA4_1, value)}) -> data_4dA3A
+###
+ggplot(data_4dA3A,aes(x = loopseq, y = value, fill = var)) +
+geom_hline(yintercept = 100, linetype = "dotted", color = "#969696", size = 0.5) +
+geom_col(position = "dodge",linewidth=1.1, color = "black", show.legend = TRUE) +
+scale_fill_manual(values = A3A_colors,labels=c("Normalized % Activity","Uracilation Index")) +
 scale_x_discrete(labels = function(x) parse(text = underline_fun(x)))+
-labs(y = "Normalized % Activity", x = "Loop Sequence", fill = "",title = plot_title) +
+scale_y_continuous(expand = c(0, 0.1), breaks= seq(0, 100, by = 25),
+sec.axis = sec_axis(trans = ~./normRA4_1  , name = "Uracilation Index", breaks=seq(0,25,5))) +
+labs(y = paste0("<span style='font-size: 45pt'>A3A</span><br><br><span style='font-size: 35pt'>Normalized % Activity</span>"), x = "Loop Sequence", fill = "",title = plot_title) +
 theme_classic() +
-coord_cartesian(ylim=c(0,max(data$vals)*1.1))+
-theme(
-  text = element_text(face = "bold", size = 40),
-  axis.text.x = element_text(angle = 0, hjust = 0.4, vjust = 0.5),
-  axis.title.y.left = element_text(size = 40, margin = margin(t = 1, r = 0.5, b = 0, l = 1, unit = "cm")),
-  axis.title.x = element_text(size = 40, margin = margin(t = 0.7, r = 1, b = 0, l = 1, unit = "cm"), hjust = 0.5, vjust = 0.6),
-  axis.title.y.right = element_text(size = 40, margin = margin(t = 0, r = 0.5, b = 0, l = 0, unit = "cm"), vjust = 4), 
-  legend.position = "top",
-  legend.background = element_blank(),
-  legend.margin = margin(t = 1, r = 0, b = 1, l = 0, unit = "cm"),  # Adjust the margin to move the legend upwards
-  plot.title = element_text(hjust = 0.5, vjust = 2.5, margin = margin(t = 1, r = 5, b = 0, l = 0, unit = "cm")),
-  plot.margin = margin(t = 0, r = 5, b = 0, l = 0, unit = "cm")) +
-guides(fill=guide_legend(keywidth=2)) ->g.4cl
-
-### 4L HPL A3B-CTD
-data.frame(Sample = factor(c("(TGT.C.)","(TTT.C.)","(GTT.C.)"),levels=c("(TGT.C.)","(TTT.C.)","(GTT.C.)")),
-Activity = c(98.47,100,29.7)) -> data
-mapacross(data$Sample,LOOPS_UI$loopseq[LOOPS_UI$stype=="A3B_CTD"],LOOPS_UI$UI[LOOPS_UI$stype=="A3B_CTD"]) -> data$Uracilation
-data -> data2
-normR = max(data$Activity)/max(data$Uracilation)
-data %<>% mutate(Uracilation = Uracilation*normR) %>%
-  gather(key = "var", value = "vals", -Sample)
-plot_title = "4L HPL"
-
-ggplot(data,aes(x = Sample, y = vals, fill = var)) +
-geom_col(position = "dodge", color = "black", show.legend = TRUE) +
-scale_fill_manual(values = A3B_colors) +
+coord_cartesian(ylim=c(0,135))+
+fig4theme +
+guides(fill=guide_legend(keywidth=2)) -> g.4d_A3A
+###
+plot_title <- "4L HPL"
+filter(Pdata.4de, loopseq %in% c("(TGT.C.)","(TTT.C.)","(GTT.C.)") & stype=="A3B_CTD") %>%
+mutate(loopseq= factor(loopseq,levels=c("(TGT.C.)","(TTT.C.)","(GTT.C.)"))) -> data2 -> data_4dA3B
+normRB4 = max(data_4dA3B$value[data_4dA3B$var=="Activity"])/max(data_4dA3B$value[data_4dA3B$var=="Uracilation"])  ## to adjust the scale of the right axis
+mutate(data_4dA3B, value = {ifelse(var=="Uracilation", value*normRB4, value)}) -> data_4dA3B
+###
+ggplot(data_4dA3B,aes(x = loopseq, y = value, fill = var)) +
+geom_hline(yintercept = 100, linetype = "dotted", color = "#969696", size = 0.5) +
+geom_col(position = "dodge",linewidth=1.1, color = "black", show.legend = TRUE) +
+scale_fill_manual(values = A3B_colors,labels=c("Normalized % Activity","Uracilation Index")) +
 scale_x_discrete(labels = function(x) parse(text = underline_fun(x)))+
-scale_y_continuous(expand = c(0, 0), breaks= seq(0, max(data$vals)*0.9, by = 20),
-sec.axis = sec_axis(trans = ~./normR  , name = "Uracilation")) +
-labs(y = "Normalized % Activity", x = "Loop Sequence", fill = "",title = plot_title) +
+scale_y_continuous(expand = c(0, 0.1), breaks= seq(0, 100, by = 25),
+sec.axis = sec_axis(trans = ~./normRB4  , name = "Uracilation Index", breaks=seq(0,25,5))) +
+labs(y = paste0("<span style='font-size: 45pt'>A3B-CTD</span><br><br><span style='font-size: 35pt'>Normalized % Activity</span>"), x = "Loop Sequence", fill = "",title = plot_title) +
 theme_classic() +
-coord_cartesian(ylim=c(0,max(data$vals)*1.1))+
-theme(
-  text = element_text(face = "bold", size = 40),
-  axis.text.x = element_text(angle = 0, hjust = 0.4, vjust = 0.5),
-  axis.title.y.left = element_text(size = 40, margin = margin(t = 1, r = 0.5, b = 0, l = 1, unit = "cm")),
-  axis.title.x = element_text(size = 40, margin = margin(t = 0.7, r = 1, b = 0, l = 1, unit = "cm"), hjust = 0.5, vjust = 0.6),
-  axis.title.y.right = element_text(size = 40, margin = margin(t = 0, r = 0.5, b = 0, l = 0, unit = "cm"), vjust = 4), 
-  legend.position = "top",
-  legend.background = element_blank(),
-  legend.margin = margin(t = 1, r = 0, b = 1, l = 0, unit = "cm"),  # Adjust the margin to move the legend upwards
-  plot.title = element_text(hjust = 0.5, vjust = 2.5, margin = margin(t = 1, r = 5, b = 0, l = 0, unit = "cm")),
-  plot.margin = margin(t = 0, r = 5, b = 0, l = 0, unit = "cm")) +
-guides(fill=guide_legend(keywidth=2)) ->g.4cr
+coord_cartesian(ylim=c(0,135))+
+fig4theme +
+guides(fill=guide_legend(keywidth=2)) -> g.4d_A3B
+###
+ggpubr::ggarrange(plotlist=list(g.4d_A3A,g.4d_A3B+theme(plot.title=element_blank())),ncol=1,nrow=2) -> g.4D
+ggsave(paste0(outdir,"Fig4D_Loop4_A3A_A3B.pdf"),g.4D, height = 20, width = 12, units = "in" )
+############################################################
+####### Fig 4E
 
 ### 3L HPL A3B-CTD
-data.frame(Sample = factor(c("(TT.C.)","(AT.C.)","(GT.C.)"),levels=c("(TT.C.)","(AT.C.)","(GT.C.)")),
-Activity = c(47.3,74.8,58)) -> data
-mapacross(data$Sample,LOOPS_UI$loopseq[LOOPS_UI$stype=="A3B_CTD"],LOOPS_UI$UI[LOOPS_UI$stype=="A3B_CTD"]) -> data$Uracilation
-data -> data3
-normR = max(data$Activity)/max(data$Uracilation)
-data %<>% mutate(Uracilation = Uracilation*normR) %>%
-  gather(key = "var", value = "vals", -Sample)
-plot_title = "3L HPL"
+plot_title <- "3L HPL"
+filter(Pdata.4de, loopseq %in% c("(TT.C.)","(AT.C.)","(GT.C.)") & stype=="A3B_CTD") %>%
+mutate(loopseq=factor(loopseq,levels=c("(TT.C.)","(AT.C.)","(GT.C.)"))) -> data3 -> data_4e3l 
+normRB3 = max(data_4e3l$value[data_4e3l$var=="Activity"])/max(data_4e3l$value[data_4e3l$var=="Uracilation"])  ## to adjust the scale of the right axis
+mutate(data_4e3l, value = {ifelse(var=="Uracilation", value*normRB3, value)}) -> data_4e3l
 
-ggplot(data,aes(x = Sample, y = vals, fill = var)) +
-geom_col(position = "dodge", color = "black", show.legend = TRUE) +
-scale_fill_manual(values = A3B_colors) +
+ggplot(data_4e3l,aes(x = loopseq , y = value, fill = var)) +
+geom_hline(yintercept = 100, linetype = "dotted", color = "#969696", size = 0.5) +
+geom_col(position = "dodge",linewidth=1.1, color = "black", show.legend = TRUE) +
+scale_fill_manual(values = A3B_colors, labels=c("Normalized % Activity","Uracilation Index")) +
 scale_x_discrete(labels = function(x) parse(text = underline_fun(x)))+
-scale_y_continuous(expand = c(0, 0), breaks= seq(0, max(data$vals)*0.9, by = 20),
-sec.axis = sec_axis(trans = ~./normR  , name = "Uracilation")) +
-labs(y = "Normalized % Activity", x = "Loop Sequence", fill = "",title = plot_title) +
+scale_y_continuous(expand = c(0, 0.1), breaks= seq(0, 100, by = 25),
+sec.axis = sec_axis(trans = ~./normRB3  , name = "Uracilation Index", breaks=seq(0,5,1))) +
+labs(y = paste0("<span style='font-size: 45pt'>A3B-CTD</span><br><br><span style='font-size: 35pt'>Normalized % Activity</span>"), x = "Loop Sequence", fill = "",title = plot_title) +
 theme_classic() +
-coord_cartesian(ylim=c(0,max(data$vals)*1.1))+
-theme(
-  text = element_text(face = "bold", size = 40),
-  axis.text.x = element_text(angle = 0, hjust = 0.4, vjust = 0.5),
-  axis.title.y.left = element_text(size = 40, margin = margin(t = 1, r = 0.5, b = 0, l = 1, unit = "cm")),
-  axis.title.x = element_text(size = 40, margin = margin(t = 0.7, r = 1, b = 0, l = 1, unit = "cm"), hjust = 0.5, vjust = 0.6),
-  axis.title.y.right = element_text(size = 40, margin = margin(t = 0, r = 0.5, b = 0, l = 0, unit = "cm"), vjust = 4), 
-  legend.position = "top",
-  legend.background = element_blank(),
-  legend.margin = margin(t = 1, r = 0, b = 1, l = 0, unit = "cm"),  # Adjust the margin to move the legend upwards
-  plot.title = element_text(hjust = 0.5, vjust = 2.5, margin = margin(t = 1, r = 5, b = 0, l = 0, unit = "cm")),
-  plot.margin = margin(t = 0, r = 5, b = 0, l = 0, unit = "cm")) +
-guides(fill=guide_legend(keywidth=2)) ->g.4dl
+coord_cartesian(ylim=c(0,90))+
+fig4theme +
+guides(fill=guide_legend(keywidth=2)) -> g.4e3L
+####################################
 
 ### 5L HPL A3B-CTD
-data.frame(Sample = factor(c("(TCAT.C.)","(TTGT.C.)","(TTTT.C.)"),levels=c("(TCAT.C.)","(TTGT.C.)","(TTTT.C.)")),
-Activity = c(71.7,67.17, 49.6)) -> data
-mapacross(data$Sample,LOOPS_UI$loopseq[LOOPS_UI$stype=="A3B_CTD"],LOOPS_UI$UI[LOOPS_UI$stype=="A3B_CTD"]) -> data$Uracilation
-data -> data4
-normR = max(data$Activity)/max(data$Uracilation)
-data %<>% mutate(Uracilation = Uracilation*normR) %>%
-  gather(key = "var", value = "vals", -Sample)
-plot_title = "5L HPL"
+plot_title <- "5L HPL"
+filter(Pdata.4de, loopseq %in% c("(TCAT.C.)","(TTGT.C.)","(TTTT.C.)") & stype=="A3B_CTD") %>%
+mutate(loopseq = factor(loopseq, levels=c("(TCAT.C.)","(TTGT.C.)","(TTTT.C.)"))) -> data4 -> data_4e5l
+normRB5 = max(data_4e5l$value[data_4e5l$var=="Activity"])/max(data_4e5l$value[data_4e5l$var=="Uracilation"])  ## to adjust the scale of the right axis
+mutate(data_4e5l, value = {ifelse(var=="Uracilation", value*normRB5, value)}) -> data_4e5l
 
-ggplot(data, aes(x = Sample, y = vals, fill = var)) +
-geom_col(position = "dodge", color = "black", show.legend = TRUE) +
-scale_fill_manual(values = A3B_colors) +
+ggplot(data_4e5l,aes(x =loopseq, y = value, fill = var)) +
+geom_hline(yintercept = 100, linetype = "dotted", color = "#969696", size = 0.5) +
+geom_col(position = "dodge",linewidth=1.1, color = "black", show.legend = TRUE) +
+scale_fill_manual(values = A3B_colors, labels=c("Normalized % Activity","Uracilation Index")) +
 scale_x_discrete(labels = function(x) parse(text = underline_fun(x)))+
-scale_y_continuous(expand = c(0, 0), breaks= seq(0, max(data$vals)*0.9, by = 20),
-sec.axis = sec_axis(trans = ~./normR  , name = "Uracilation")) +
-labs(y = "Normalized % Activity", x = "Loop Sequence", fill = "",title = plot_title) +
+scale_y_continuous(expand = c(0, 0.1), breaks= seq(0, 100, by = 25),
+sec.axis = sec_axis(trans = ~./normRB5  , name = "Uracilation Index", breaks=seq(0,15,5))) +
+labs(y = paste0("<span style='font-size: 35pt'>Normalized % Activity</span>"), x = "Loop Sequence", fill = "",title = plot_title) +
 theme_classic() +
-coord_cartesian(ylim=c(0,max(data$vals)*1.1))+
-theme(
-  text = element_text(face = "bold", size = 40),
-  axis.text.x = element_text(angle = 0, hjust = 0.4, vjust = 0.5),
-  axis.title.y.left = element_text(size = 40, margin = margin(t = 1, r = 0.5, b = 0, l = 1, unit = "cm")),
-  axis.title.x = element_text(size = 40, margin = margin(t = 0.7, r = 1, b = 0, l = 1, unit = "cm"), hjust = 0.5, vjust = 0.6),
-  axis.title.y.right = element_text(size = 40, margin = margin(t = 0, r = 0.5, b = 0, l = 0, unit = "cm"), vjust = 4), 
-  legend.position = "top",
-  legend.background = element_blank(),
-  legend.margin = margin(t = 1, r = 0, b = 1, l = 0, unit = "cm"),  # Adjust the margin to move the legend upwards
-  plot.title = element_text(hjust = 0.5, vjust = 2.5, margin = margin(t = 1, r = 5, b = 0, l = 0, unit = "cm")),
-  plot.margin = margin(t = 0, r = 5, b = 0, l = 0, unit = "cm")) +
-guides(fill=guide_legend(keywidth=2)) ->g.4dr
+coord_cartesian(ylim=c(0,90))+
+fig4theme +
+guides(fill=guide_legend(keywidth=2)) -> g.4e5L
+####################################
+ggpubr::ggarrange(plotlist=list(g.4e3L,	g.4e5L),ncol=2,nrow=1) -> g.4E
+ggsave(paste0(outdir,"Fig4E_A3B_Loop3_5.pdf"),g.4E, height = 12, width = 24, units = "in" )
+####################################
+########
+LOOPS_UI %>%
+  filter(stype%in% c("A3A","A3B_CTD"),
+  loopseq %in% tmp$loopseq) %>% 
+  select(stype,loopseq,value=UI) %>%
+  mutate(var = "Uracilation") %>% 
+  rbind(filter(GelData_fig4_TTTC_normalized,stype=="A3B_CTD"|loopseq%in%c("(GTT.C.)","(TGT.C.)","(TTT.C.)")),.)  %>% 
+  spread(key="var", value="value") %>%
+  {cor.test(.$Activity,.$Uracilation,method="spearman")}
+#########
 
-ggpubr::ggarrange(plotlist=list(g.4cl,g.4cr,g.4dl,g.4dr),ncol=2,nrow=2) -> g.4c
-ggsave(paste0(outdir,"Fig4CD.pdf"),g.4c, height = 18, width = 24, units = "in" )
-######
-# looking at correlation between Uracilation and in vitro Activity
-rbind(data1,data2,data3,data4) %>% 
-{cor.test(.$Activity,.$Uracilation,method="spearman")}
 #         Spearman's rank correlation rho
+
 # data:  .$Activity and .$Uracilation
-# S = 116, p-value = 0.04575
+# S = 74.63, p-value = 0.006028
 # alternative hypothesis: true rho is not equal to 0
 # sample estimates:
 #       rho 
-# 0.5944056 
-####################################################################################
-####################################################################################
-#### Figure 5 A
-## Patient data used to create the plots are provided.
-PX <- read.table(paste0(topdir,'PX_data.txt'),sep="\t",header=T,comment.char="")
+# 0.7390554 
+####################################
 
-# Number of (3/3) hairpin sites:  210708
-# Number of (4/4) hairpin sites:  204274
-# Number of (4/5) hairpin sites:  146121
-# Number of (5/5) hairpin sites:  102179
-# Normalization Ratios:
-normR45 = 146121/mean(c(146121,102179));
-normR55 = 102179/mean(c(146121,102179))
+########################################################################
+# Supplementary Figure S8
+######### normalize within each replicate
+## normalize within each gel by mean activity 
+group_by(geldata,stype) %>%
+dplyr::summarise(norm_factor = mean(activity)) %>%
+	left_join(geldata,.) %>%
+	mutate(norm_activity = activity*100/norm_factor)  -> tmp
 
-damp=10
-PX %<>% mutate( Ratio = ((n45/normR45)+damp)/((n55/normR55)+damp))
-PX %>%
-ggplot(aes(x=Ratio,y=frac_apobec*100,color = ttype_clr))+
-geom_hline(yintercept = 50,linetype="longdash",color="black")+
-geom_vline(xintercept = 1,linetype="longdash",color="black")+
-geom_point(size=0.3)+
-theme_classic()+
-scale_x_continuous(expand=c(0,0),breaks=seq(0.5,4.5,.5),labels=c("","1","","2","","3","","4",""))+
-scale_y_continuous(expand=c(0,0),breaks=seq(0,100,10),labels=c("0","","","","","50","","","","","100"))+
-scale_color_identity()+
-coord_cartesian(clip = 'off', xlim=c(0.2,4.5),ylim=c(-0.01,100))+
-labs(x="Position 4/5 ratio in pentaloops",y="Percent APOBEC")+
-theme(legend.position = "none",
-axis.text=element_text(size=16,color="black"),
-axis.title=element_text(size=18,face="bold"),
-axis.title.x=element_text(margin = margin(t = 10)),
-axis.title.y=element_text(margin = margin(l = 5))) -> gtmp
-ggplot2::ggplotGrob(gtmp) -> gtmp
-gtmp$layout$z[gtmp$layout$name=="panel"] = 17
-ggplotify::as.ggplot(gtmp) -> g.5A
-ggsave(paste0(outdir,"Fig5A_HP_45_ratios.pdf"),g.5A, height = 4 , width = 5, units = "in")
-################
-## one sample t-test with null ratio =1
-t.test(PX$Ratio,mu=1,alternative="two.sided",conf.level=0.95)
-#         One Sample t-test
-# data:  PX$Ratio
-# t = 11.318, df = 3003, p-value < 2.2e-16
-# alternative hypothesis: true mean is not equal to 1
-# 95 percent confidence interval:
-#  1.036665 1.052032
-# sample estimates:
-# mean of x 
-#  1.044349
+## find the mean of TTC for A3A and TTTC A3B
+tmp  %>% filter(stype=="A3A" & loopseq=="(TT.C.)") %>% pull(norm_activity) %>% mean  -> TTC_A3A_norm_activity
+tmp  %>% filter(stype=="A3B_CTD" & loopseq=="(TTT.C.)") %>% pull(norm_activity) %>% mean -> TTTC_A3B_norm_activity
+## normalize by the mean of TTTC for A3A and A3B
+mutate(tmp, normalized_activity = ifelse(stype=="A3A",
+					norm_activity*100/TTC_A3A_norm_activity,
+                    norm_activity*100/TTTC_A3B_norm_activity)) %>%
+group_by(stype, loopseq) %>%
+dplyr::summarise(value = mean(normalized_activity)) %>%
+mutate(var = "Activity") -> GelData_figureS8
+#########
+LOOPS_UI %>%
+  filter(stype%in% c("A3A","A3B_CTD"),
+  loopseq %in% GelData_figureS8$loopseq) %>% 
+  select(stype,loopseq,value=UI) %>%
+  mutate(var = "Uracilation") %>% 
+  rbind(GelData_figureS8,.) -> Pdata.s8
+#########
 
-## for samples with percent apobec > 50%
-t.test(PX$Ratio[PX$frac_apobec>0.5],mu=1,alternative="two.sided",conf.level=0.95)
-#         One Sample t-test
-# data:  PX$Ratio[PX$frac_apobec > 0.5]
-# t = 11.071, df = 119, p-value < 2.2e-16
-# alternative hypothesis: true mean is not equal to 1
-# 95 percent confidence interval:
-#  1.509467 1.731395
-# sample estimates:
-# mean of x 
-#  1.620431
-
-################
-#### Figure 5 B
-PX %$% case_when(mostA3AB=="A3A"~"A3A-most",
-		mostA3AB=="A3B"~"A3B-most",
-		frac_apobec< 0.05~"APOBEC-low\n(<5%)",
-		TRUE~"rest") -> PX$mostA3AB2 
-####
-damp=10
-normR33 = 210708/mean(c(210708,204274)); normR44 = 204274/mean(c(210708,204274))
-filter(PX , mostA3AB2 != "rest") %>% 
-	mutate(mostA3AB2 = factor(mostA3AB2, levels = c("A3A-most","APOBEC-low\n(<5%)","A3B-most")),
-      Ratio = ((n33/normR33)+damp)/((n44/normR44)+damp)) -> PX
-
-### t-test betweeb A3A-most and A3B-most
-t.test(PX$Ratio[PX$mostA3AB2=="A3A-most"],PX$Ratio[PX$mostA3AB2=="A3B-most"],alternative="two.sided",conf.level=0.95)$p.value %>%
-pval2asterisk() -> pvalA3AvA3B
-#         Welch Two Sample t-test
-# data:  PX$Ratio[PX$mostA3AB2 == "A3A-most"] and PX$Ratio[PX$mostA3AB2 == "A3B-most"]
-# t = 13.587, df = 17.274, p-value = 1.181e-10
-# alternative hypothesis: true difference in means is not equal to 0
-# 95 percent confidence interval:
-#  1.617446 2.211239
-# sample estimates:
-# mean of x mean of y 
-#  2.895475  0.981133 
-### t-test betweeb A3A-most and APOBEC low
-t.test(PX$Ratio[PX$mostA3AB2=="A3A-most"],PX$Ratio[PX$mostA3AB2=="APOBEC-low\n(<5%)"],alternative="two.sided",conf.level=0.95)$p.value %>%
-pval2asterisk() -> pvalA3AvLow
-#         Welch Two Sample t-test
-# data:  PX$Ratio[PX$mostA3AB2 == "A3A-most"] and PX$Ratio[PX$mostA3AB2 == "APOBEC-low\n(<5%)"]
-# t = 14.45, df = 13.012, p-value = 2.16e-09
-# alternative hypothesis: true difference in means is not equal to 0
-# 95 percent confidence interval:
-#  1.599200 2.161372
-# sample estimates:
-# mean of x mean of y 
-#  2.895475  1.015189 
-### t-test betweeb A3B-most and APOBEC low
-t.test(PX$Ratio[PX$mostA3AB2=="A3B-most"],PX$Ratio[PX$mostA3AB2=="APOBEC-low\n(<5%)"],alternative="two.sided",conf.level=0.95)$p.value %>%
-pval2asterisk() -> pvalA3BvLow
-#         Welch Two Sample t-test
-# data:  PX$Ratio[PX$mostA3AB2 == "A3B-most"] and PX$Ratio[PX$mostA3AB2 == "APOBEC-low\n(<5%)"]
-# t = -0.62866, df = 11.06, p-value = 0.5423
-# alternative hypothesis: true difference in means is not equal to 0
-# 95 percent confidence interval:
-#  -0.15321058  0.08509797
-# sample estimates:
-# mean of x mean of y 
-#  0.981133  1.015189 
-
-PX %>%   ggplot(aes(x=mostA3AB2,y=Ratio*rnorm(n=nrow(PX), mean=1,sd=0.02),fill=mostA3AB2))+
-geom_violin(alpha=0.5, position=position_dodge(.9))+
-geom_jitter(width=0.1,size=0.4,alpha=0.5)+
-scale_fill_manual(values =c("#fc3a46","#9e9e9e","#5a96ff"))+
-theme_classic()+
-theme(legend.position = "none",
-plot.title=element_text(size=18,hjust=0.5),
-axis.text=element_text(size=14, colour = "black"),
-axis.title=element_text(size=18, colour = "black" ))+
-labs(title="",y="log2 ratio",x="",fill="") +
-geom_abline(intercept=0, slope=0, linetype="dashed", color = "red") +
-scale_y_continuous(limits=c(0.4,5.2),trans = "log2", breaks=c(0.5,1,2,4), labels=log2(c(0.5,1,2,4))) +
-annotation_logticks(sides = "l") +
-annotate("text", x = 1.5, y = 4.2, label = pvalA3AvLow, size = 7) + 
-geom_segment(aes(x =.9, xend = 2.1 , y = 4.1, yend = 4.1), color = "black", linewidth = 1)+
-annotate("text", x = 2.5, y = 2.5, label = pvalA3BvLow, size = 5) +
-geom_segment(aes(x =1.9, xend = 3.1 , y = 2.2, yend = 2.2), color = "black", linewidth = 1) +
-annotate("text", x = 2, y = 5.1, label = pvalA3AvA3B, size = 7) +
-geom_segment(aes(x =.9, xend = 3.1 , y = 5, yend = 5), color = "black", linewidth = 1) -> g.5B
-ggsave(paste0(outdir,"Fig5B_HP_33_44_ratios.pdf"),g.5B, height = 4.2 , width = 5, units = "in")
-################
-
-
-#### Figures 5 C,D
-################### Data for Top Panel (5C) #############################
+### 3L HPL A3A
+plot_title <- "3L HPL"
+filter(Pdata.s8, loopseq %in% c("(TT.C.)","(AT.C.)","(GT.C.)") & stype=="A3A") %>%
+mutate(loopseq= factor(loopseq,levels=c("(TT.C.)","(AT.C.)","(GT.C.)"))) -> data_s8A3
+normRA3 = max(data_s8A3$value[data_s8A3$var=="Activity"])/max(data_s8A3$value[data_s8A3$var=="Uracilation"])  ## to adjust the scale of the right axis
+mutate(data_s8A3, value = {ifelse(var=="Uracilation", value*normRA3, value)}) -> data_s8A3
+###
+ggplot(data_s8A3,aes(x = loopseq, y = value, fill = var)) +
+geom_hline(yintercept = 100, linetype = "dotted", color = "#969696", size = 0.5) +
+geom_col(position = "dodge",linewidth=1.1, color = "black", show.legend = TRUE) +
+scale_fill_manual(values = A3A_colors,labels=c("Normalized % Activity","Uracilation Index")) +
+scale_x_discrete(labels = function(x) parse(text = underline_fun(x)))+
+scale_y_continuous(expand = c(0, 0.1), breaks= seq(0, 100, by = 25),
+sec.axis = sec_axis(trans = ~./normRA3  , name = "Uracilation Index", breaks=seq(0,20,5))) +
+labs(y = paste0("<span style='font-size: 45pt'>A3A</span><br><br><span style='font-size: 35pt'>Normalized % Activity</span>"), x = "Loop Sequence", fill = "",title = plot_title) +
+theme_classic() +
+coord_cartesian(ylim=c(0,105))+
+fig4theme +
+guides(fill=guide_legend(keywidth=2)) -> g.s8A3
+### 4L HPL A3A
+plot_title <- "4L HPL"
+filter(Pdata.s8, loopseq %in% c("(TGT.C.)","(TTT.C.)","(GTT.C.)") & stype=="A3A") %>%
+mutate(loopseq= factor(loopseq,levels=c("(TGT.C.)","(TTT.C.)","(GTT.C.)"))) -> data_s8A4
+normRA4_2 = max(data_s8A4$value[data_s8A4$var=="Activity"])/max(data_s8A4$value[data_s8A4$var=="Uracilation"])  ## to adjust the scale of the right axis
+mutate(data_s8A4, value = {ifelse(var=="Uracilation", value*normRA4_2, value)}) -> data_s8A4
+###
+ggplot(data_s8A4,aes(x = loopseq, y = value, fill = var)) +
+geom_hline(yintercept = 100, linetype = "dotted", color = "#969696", size = 0.5) +
+geom_col(position = "dodge",linewidth=1.1, color = "black", show.legend = TRUE) +
+scale_fill_manual(values = A3A_colors,labels=c("Normalized % Activity","Uracilation Index")) +
+scale_x_discrete(labels = function(x) parse(text = underline_fun(x)))+
+scale_y_continuous(expand = c(0, 0.1), breaks= seq(0, 100, by = 25),
+sec.axis = sec_axis(trans = ~./normRA4_2  , name = "Uracilation Index", breaks=seq(0,25,5))) +
+labs(y = paste0("<span style='font-size: 45pt'>A3A</span><br><br><span style='font-size: 35pt'>Normalized % Activity</span>"), x = "Loop Sequence", fill = "",title = plot_title) +
+theme_classic() +
+coord_cartesian(ylim=c(0,105))+
+fig4theme +
+guides(fill=guide_legend(keywidth=2)) -> g.s8A4
+### 5L HPL A3A
+plot_title <- "5L HPL"
+filter(Pdata.s8, loopseq %in% c("(TCAT.C.)","(TTGT.C.)") & stype=="A3A") %>%
+mutate(loopseq= factor(loopseq,levels=c("(TCAT.C.)","(TTGT.C.)"))) -> data_s8A5 
+normRA5 = max(data_s8A5$value[data_s8A5$var=="Activity"])/max(data_s8A5$value[data_s8A5$var=="Uracilation"])  ## to adjust the scale of the right axis
+mutate(data_s8A5, value = {ifelse(var=="Uracilation", value*normRA5, value)}) -> data_s8A5
+###
+ggplot(data_s8A5,aes(x = loopseq, y = value, fill = var)) +
+geom_hline(yintercept = 100, linetype = "dotted", color = "#969696", size = 0.5) +
+geom_col(position = "dodge",linewidth=1.1, color = "black", show.legend = TRUE) +
+scale_fill_manual(values = A3A_colors,labels=c("Normalized % Activity","Uracilation Index")) +
+scale_x_discrete(labels = function(x) parse(text = underline_fun(x)))+
+scale_y_continuous(expand = c(0, 0.1), breaks= seq(0, 100, by = 25),
+sec.axis = sec_axis(trans = ~./normRA5  , name = "Uracilation Index", breaks=seq(0,3,1))) +
+labs(y = paste0("<span style='font-size: 45pt'>A3A</span><br><br><span style='font-size: 35pt'>Normalized % Activity</span>"), x = "Loop Sequence", fill = "",title = plot_title) +
+theme_classic() +
+coord_cartesian(ylim=c(0,105))+
+fig4theme +
+guides(fill=guide_legend(keywidth=2)) -> g.s8A5
+#######
+ggpubr::ggarrange(plotlist=list(
+	g.s8A4,	g.s8A3,	g.s8A5,
+	g.4d_A3B+ coord_cartesian(ylim=c(0,105)),
+	g.4e3L+ coord_cartesian(ylim=c(0,105)),
+	g.4e5L+ coord_cartesian(ylim=c(0,105))),
+	ncol=3,nrow=2) -> g.S8
+ggsave(paste0(outdir,"FigS8.pdf"),g.S8, height = 20, width = 36, units = "in" )	
+################################################################################
+################################################################################
+#### Figures 5 A,B
+################### UPD-Seq Data for Top Panel (5A) ############################
 filter(X , U < 0.8 , samp %in% Samples$samp[Samples$stype %in% c("A3A","A3B_full")] ) %>%  
 left_join( select( filter(POSData, minus0==4 ) , POS,  looplen, looppos,ss,ssGroup) , .) %>%  
 left_join(.,Samples, by= "samp") -> POSXDTOP_U
@@ -1266,12 +1226,12 @@ summarySE( measurevar="U", groupvars=c("stype","samp","ssGroup")) %>%
 mutate(U=U*1e3) %>% 
 # normalize to the ss-Group 0-7
 mutate(UN = ifelse(stype=="A3A",U/baseRates$U[baseRates$stype=="A3A"], U/baseRates$U[baseRates$stype=="A3B_full"])) %>% 
-summarySE(  measurevar="UN", groupvars=c( "stype","ssGroup")) -> PD.5C_UPDSEQ
+summarySE(  measurevar="UN", groupvars=c( "stype","ssGroup")) -> PD.5A_UPDSEQ
 ######
-PD.5C_UPDSEQ$stype[ PD.5C_UPDSEQ$stype=="A3B_full"] <- "A3B"
-PD.5C_UPDSEQ %<>% mutate(UN = ifelse(stype=="A3A",UN * -1, UN ))
+PD.5A_UPDSEQ$stype[ PD.5A_UPDSEQ$stype=="A3B_full"] <- "A3B"
+PD.5A_UPDSEQ %<>% mutate(UN = ifelse(stype=="A3A",UN * -1, UN ))
 
-#################### Data for Bottom Panel (5D) #############################
+#################### UPD-Seq Data for Bottom Panel (5B) #############################
 filter(X , U < 0.8 , samp %in% Samples$samp[Samples$stype %in% c("A3A","A3B_full")] ) %>%  
 left_join( select( filter(POSData, minus0==4, looplen %in% 3:6 & looppos > 0 & looppos <= looplen) , POS,  looplen, looppos,ss,ssGroup) , .) %>%  
 left_join(.,Samples, by= "samp")  %>% 
@@ -1279,9 +1239,9 @@ drop_na() %>%
 summarySE( measurevar="U", groupvars=c("stype","samp","looplen","looppos","ssGroup")) %>% 
 mutate(U=U*1e3) %>% 
 mutate(UN = ifelse(stype=="A3A",U/baseRates$U[baseRates$stype=="A3A"], U/baseRates$U[baseRates$stype=="A3B_full"])) %>% # normalize to the ss-Group 0-7
-summarySE(  measurevar="UN", groupvars=c( "stype","looplen","looppos", "ssGroup")) -> PD.5D_UPDSEQ
-PD.5D_UPDSEQ$stype[PD.5D_UPDSEQ$stype=="A3B_full"] <- "A3B"
-PD.5D_UPDSEQ %<>% mutate(UN = ifelse(stype=="A3A",UN * -1, UN ))
+summarySE(  measurevar="UN", groupvars=c( "stype","looplen","looppos", "ssGroup")) -> PD.5B_UPDSEQ
+PD.5B_UPDSEQ$stype[PD.5B_UPDSEQ$stype=="A3B_full"] <- "A3B"
+PD.5B_UPDSEQ %<>% mutate(UN = ifelse(stype=="A3A",UN * -1, UN ))
 
 ########################################
 ### Plotting
@@ -1289,14 +1249,14 @@ library(ggnewscale)
 colB <- colorRampPalette(c("#e1e6ff","#0018ca"))(8)
 colA <- colorRampPalette(c("#fee0e0","#da000e"))(8)
 #####
-ggplot(PD.5C_UPDSEQ[PD.5C_UPDSEQ$stype=="A3B",], aes(x=ssGroup, y=UN, group = ssGroup, fill= ssGroup))+
+ggplot(PD.5A_UPDSEQ[PD.5A_UPDSEQ$stype=="A3B",], aes(x=ssGroup, y=UN, group = ssGroup, fill= ssGroup))+
 geom_bar( ,alpha=1,lwd = 0.2 , col="black", stat= "identity", position=position_dodge())+
 scale_fill_manual(values=colB) + 
 new_scale_fill() +
-geom_bar( data=PD.5C_UPDSEQ[PD.5C_UPDSEQ$stype=="A3A",],aes(x=ssGroup, y=UN, group = ssGroup, fill= ssGroup),alpha=1,lwd = 0.2 , col="black", stat= "identity", position=position_dodge())+
+geom_bar( data=PD.5A_UPDSEQ[PD.5A_UPDSEQ$stype=="A3A",],aes(x=ssGroup, y=UN, group = ssGroup, fill= ssGroup),alpha=1,lwd = 0.2 , col="black", stat= "identity", position=position_dodge())+
 scale_fill_manual(values=colA) +
 theme_bw()+
-geom_errorbar( data=PD.5C_UPDSEQ, inherit.aes = T , mapping = aes( group = ssGroup,ymin=UN-ci, ymax=UN+ci), width=.2, position=position_dodge(.9)) + 
+geom_errorbar( data=PD.5A_UPDSEQ, inherit.aes = T , mapping = aes( group = ssGroup,ymin=UN-ci, ymax=UN+ci), width=.2, position=position_dodge(.9)) + 
 geom_segment(aes(x=0, xend=8.8, y=0, yend=0), linetype="dashed",color="black", linewidth=1) +
 annotate(geom="text", x=1, y=-1.8,size=9, label="A3A",color="red",hjust=1) +
 annotate(geom="text", x=1, y=1.85,size=9, label="A3B",color="Blue",hjust=0) +
@@ -1315,13 +1275,13 @@ plot.margin = margin(.5, 0, 0, 0, "in")) +
 scale_y_continuous(expand = c(0,0), breaks=seq(-8,8,2),labels=abs(seq(-8,8,2)))+
 guides(fill = guide_colourbar(barwidth = 10, barheight = 1, label.position = "bottom", title.position = "top")) +
 coord_flip(ylim=c(-8,8),xlim=c(0.8,8.2),clip="off") +
-annotate(geom="text", x=12, y=0,size=12, label="italic('E. coli')~ ' UPD-Seq'",parse=T,color="Black",hjust=0.5) -> g.5C_UPDSEQ
+annotate(geom="text", x=12, y=0,size=12, label="italic('E. coli')~ ' UPD-Seq'",parse=T,color="Black",hjust=0.5) -> g.5A_UPDSEQ
 #####
-ggplot(PD.5D_UPDSEQ) +
-geom_bar(data = filter(PD.5D_UPDSEQ, stype=="A3B"), aes(x=looppos, y=UN, group = as.factor(ssGroup), fill= ssGroup),alpha=1,lwd = 0.2 , col="black", stat= "identity", position=position_dodge( preserve = "single"))+
+ggplot(PD.5B_UPDSEQ) +
+geom_bar(data = filter(PD.5B_UPDSEQ, stype=="A3B"), aes(x=looppos, y=UN, group = as.factor(ssGroup), fill= ssGroup),alpha=1,lwd = 0.2 , col="black", stat= "identity", position=position_dodge( preserve = "single"))+
 scale_fill_manual(values=colB) + 
 new_scale_fill() +
-geom_bar(data = filter(PD.5D_UPDSEQ, stype=="A3A"), aes(x=looppos, y=UN, group = as.factor(ssGroup), fill= ssGroup),alpha=1,lwd = 0.2 , col="black", stat= "identity", position=position_dodge( preserve = "single"))+
+geom_bar(data = filter(PD.5B_UPDSEQ, stype=="A3A"), aes(x=looppos, y=UN, group = as.factor(ssGroup), fill= ssGroup),alpha=1,lwd = 0.2 , col="black", stat= "identity", position=position_dodge( preserve = "single"))+
 scale_fill_manual(values=colA) +
 theme_bw()+
 coord_flip(ylim=c(-80,80)) +
@@ -1349,26 +1309,26 @@ legend.title = element_text(size = 15,hjust=0.5),
 legend.text = element_text(size = 14) , 
 legend.position =  "none",
 legend.background = element_rect(fill=NA))+
-scale_fill_manual(values =  colA ) -> g.5D_UPDSEQ 
+scale_fill_manual(values =  colA ) -> g.5B_UPDSEQ 
 
-ggpubr::ggarrange(g.5C_UPDSEQ+theme(plot.margin = margin(0, 1, 0, 0, "in")), g.5D_UPDSEQ, ncol = 1, heights = c(2,5)) +
-theme(plot.margin = unit(c(1, .2, .2, .2), "in")) -> G.5CD_UPDSEQ
+ggpubr::ggarrange(g.5A_UPDSEQ+theme(plot.margin = margin(0, 1, 0, 0, "in")), g.5B_UPDSEQ, ncol = 1, heights = c(2,5)) +
+theme(plot.margin = unit(c(1, .2, .2, .2), "in")) -> G.5AB_UPDSEQ
 
 ########################################################################## 
 ##################### import mutation Data from Human tumors
-#################### Data for Top Panel (5C) #############################
-TumorData5C <- read.table(paste0(topdir,"Tumors_A3A_A3B_TpC_ssbins.txt"),header=T)
-TumorData5C <- mutate(TumorData5C,CI=sd_TpC * 1.96 ,
+#################### Tumor Data for Top Panel (5A) #############################
+TumorData5A <- read.table(paste0(topdir,"Patient_data/Tumors_A3A_A3B_TpC_ssbins.txt"),header=T)
+TumorData5A <- mutate(TumorData5A,CI=sd_TpC * 1.96 ,
 					Rate = {ifelse(A3AB=="A3A", (rate_TpC * -1 ),rate_TpC )}) %>%
 		mutate(range = factor(range, levels=c('0-4','5-7','8-11','12-15','16+')))
-#################### Data for Bottom Panel (5D) #############################
-TumorData5D <- read.table(paste0(topdir,"Tumors_A3A_A3B_TpC_ssbins_looplen_looppos.txt"),header=T)
-TumorData5D <- mutate(TumorData5D, CI=sd*1.96,
+#################### Tumor Data for Bottom Panel (5B) #############################
+TumorData5B <- read.table(paste0(topdir,"Patient_data/Tumors_A3A_A3B_TpC_ssbins_looplen_looppos.txt"),header=T)
+TumorData5B <- mutate(TumorData5B, CI=sd*1.96,
 		Rate = {ifelse(Sample=="A3A", (rate  * -1 ),rate )},
 		range = factor(ss_range, levels=c('0-4','5-7','8-11','12-15','16+')))
 ### set a minimum number of mutations per bin to be included in the plot
 nmin=2;
-TumorData5D %<>% mutate(Rate = ifelse(nmut < nmin, NA, Rate),
+TumorData5B %<>% mutate(Rate = ifelse(nmut < nmin, NA, Rate),
 						CI= ifelse(nmut < nmin , NA, CI))  
 ##########################
 ### Plotting
@@ -1376,14 +1336,14 @@ library(ggplot2);library(ggnewscale)
 colB <- colorRampPalette(c("#e1e6ff","#0018ca"))(6)
 colA <- colorRampPalette(c("#fee0e0","#da000e"))(6)
 ###
-ggplot(TumorData5C[TumorData5C$A3AB=="A3B",], aes(x=range, y=Rate, group = range, fill= range))+
+ggplot(TumorData5A[TumorData5A$A3AB=="A3B",], aes(x=range, y=Rate, group = range, fill= range))+
 geom_bar( ,alpha=1,lwd = 0.2 , col="black", stat= "identity", position=position_dodge())+
 scale_fill_manual(values=colB) + 
 new_scale_fill() +
-geom_bar( data=TumorData5C[TumorData5C$A3AB=="A3A",],aes(x=range, y=Rate, group = range, fill= range),alpha=1,lwd = 0.2 , col="black", stat= "identity", position=position_dodge())+
+geom_bar( data=TumorData5A[TumorData5A$A3AB=="A3A",],aes(x=range, y=Rate, group = range, fill= range),alpha=1,lwd = 0.2 , col="black", stat= "identity", position=position_dodge())+
 scale_fill_manual(values=colA) +
 theme_bw()+
-geom_errorbar( data=TumorData5C, inherit.aes = T , mapping = aes( group = range,ymin=Rate-CI, ymax=Rate+CI), width=.2, position=position_dodge(.9)) + 
+geom_errorbar( data=TumorData5A, inherit.aes = T , mapping = aes( group = range,ymin=Rate-CI, ymax=Rate+CI), width=.2, position=position_dodge(.9)) + 
 geom_segment(aes(x=0, xend=5.3, y=0, yend=0), linetype="dashed",color="black", size=1) +
 annotate(geom="text", x=1, y=-1.2,size=9, label="A3A-most",color="red",hjust=1) +
 annotate(geom="text", x=1, y=1.2,size=9, label="A3B-most",color="Blue",hjust=0) +
@@ -1402,13 +1362,13 @@ legend.position =   "none") +
 scale_y_continuous(expand = c(0,0), breaks=seq(-3,3,1),labels=abs(seq(-3,3,1)))+
 guides(fill = guide_colourbar(barwidth = 10, barheight = 1, label.position = "bottom", title.position = "top")) +
 coord_flip(ylim=c(-3,3),xlim=c(0.8,5.2),clip="off") +
-annotate(geom="text", x=8, y=0,size=12, label="Patient tumors ",color="Black",hjust=0.5) -> g.5C_Tumors
+annotate(geom="text", x=8, y=0,size=12, label="Patient tumors ",color="Black",hjust=0.5) -> g.5A_Tumors
 ###################
-ggplot(TumorData5D) +
-geom_bar(data = filter(TumorData5D, Sample=="A3B"), aes(x=looppos, y=Rate, group = as.factor(range), fill= range),alpha=1,lwd = 0.2 , col="black", stat= "identity", position=position_dodge( preserve = "single"))+
+ggplot(TumorData5B) +
+geom_bar(data = filter(TumorData5B, Sample=="A3B"), aes(x=looppos, y=Rate, group = as.factor(range), fill= range),alpha=1,lwd = 0.2 , col="black", stat= "identity", position=position_dodge( preserve = "single"))+
 scale_fill_manual(values=colB) + 
 new_scale_fill() +
-geom_bar(data = filter(TumorData5D, Sample=="A3A"), aes(x=looppos, y=Rate, group = as.factor(range), fill= range),alpha=1,lwd = 0.2 , col="black", stat= "identity", position=position_dodge( preserve = "single"))+
+geom_bar(data = filter(TumorData5B, Sample=="A3A"), aes(x=looppos, y=Rate, group = as.factor(range), fill= range),alpha=1,lwd = 0.2 , col="black", stat= "identity", position=position_dodge( preserve = "single"))+
 scale_fill_manual(values=colA) +
 theme_bw()+
 coord_flip(ylim=c(-22,22)) +
@@ -1436,25 +1396,25 @@ legend.title = element_text(size = 15,hjust=0.5),
 legend.text = element_text(size = 14) , 
 legend.position =  "none",
 legend.background = element_rect(fill=NA))+
-scale_fill_manual(values =  colA ) -> g.5D_Tumors
+scale_fill_manual(values =  colA ) -> g.5B_Tumors
 ###################
-ggpubr::ggarrange(g.5C_Tumors+theme(plot.margin = margin(0, 1, 0, 0, "in")), g.5D_Tumors, ncol = 1, heights = c(2,5)) +
-  theme(plot.margin = unit(c(1, .2, .2, .2), "in")) -> G.5CD_Tumors
-######################
-ggpubr::ggarrange(G.5CD_UPDSEQ,G.5CD_Tumors, ncol = 2 ) +
-  theme(plot.margin = unit(c(.2, .2, .2, .2), "in")) -> G.5CD
-ggsave(paste0(outdir,"Fig5_CD_UPDSEQ_PatientTumors.pdf") ,  G.5CD,  height = 15 , width = 18, units = "in")
+ggpubr::ggarrange(g.5A_Tumors+theme(plot.margin = margin(0, 1, 0, 0, "in")), g.5B_Tumors, ncol = 1, heights = c(2,5)) +
+  theme(plot.margin = unit(c(1, .2, .2, .2), "in")) -> G.5AB_Tumors
+###################### combine the left and right panels
+ggpubr::ggarrange(G.5AB_UPDSEQ,G.5AB_Tumors, ncol = 2 ) +
+  theme(plot.margin = unit(c(.2, .2, .2, .2), "in")) -> G.5AB
+ggsave(paste0(outdir,"Fig5_AB_UPDSEQ_PatientTumors.pdf") ,  G.5AB,  height = 15 , width = 18, units = "in")
 
 
-#################################
-###### for supplementary figure 6
+###########################################################################
+###### for supplementary figure 7
 ### Generating a made up list of mutations to create supplementary figure explaining the river plot
 matrix(c(2,10,10,5,10,3,7,2,4,5,2,3,4), nrow = 13, ncol = 1,
  dimnames = list(c("AT[C>U]A", "TT[C>U]C", "TT[C>U]G", "TT[C>U]T", "CA[C>U]A", "CA[C>U]C", "CA[C>U]G", "GT[C>U]T", "CT[C>U]A", "CA[C>U]C", "CG[C>U]G", "CC[C>U]T","TA[C>U]A"), "Sample")) -> RivPlot_tmp
 
 ## counting the mutations in a 4x4 matrix
 matrix(0,nrow=4, ncol = 4, dimnames =list(c("A","C","G","T"),1:4)) -> Seqlogo_tmp
-for(i in 1:nrow(RivPlot_tmp)){
+for(i in 1:nrow(RivPlot_tmp)){    
 	for(j in c(1,2,4)){
 		x <- c(1,2,0,8)[j]
   Seqlogo_tmp[substr(rownames(RivPlot_tmp)[i],x,x),j] <- Seqlogo_tmp[substr(rownames(RivPlot_tmp)[i],x,x),j] + RivPlot_tmp[i,1]
@@ -1469,6 +1429,155 @@ ggseqlogo( Seqlogo_tmp, method = 'bits' )+
    plot.title = element_text(size= 22),
      axis.title = element_text(size= 20))
 
-RivPlot(RivPlot_tmp, title = "River Plot",fontsize=8,is_norm=TRUE ) -> g.6S
-ggsave(paste0(outdir,"Fig6S_RiverPlot.pdf"),g.6S, height = 4 , width = 5, units = "in") 
-#################################
+RivPlot(RivPlot_tmp, title = "River Plot",fontsize=8,is_norm=TRUE ) -> g.7S
+ggsave(paste0(outdir,"Fig7S_RiverPlot.pdf"),g.7S, height = 4 , width = 5, units = "in") 
+###########################################################################
+
+
+###########################################################################
+#### Extracting the psuedo-mutation counts for Hairpin Mutation Analysis
+########################################################################### 
+library(tidyverse);library(Rmisc);library(magrittr)
+load(paste0(topdir,"Uracilation_Data.RData"))
+Samples %>% filter(stype %in% c("A3B_full","A3A")) -> xsamp
+ACGT <- c("A","C","G","T")
+##########
+POSData$ssbin <-  cut(POSData$ss , breaks=c(-1,4,7,11,15,Inf), labels=c(1:5))
+##########
+filter(X , U < 0.8, samp %in% xsamp$samp[xsamp$stype %in% c("A3A","A3B_full")] ) %>% 
+left_join( select( filter(POSData, minus0==4, looplen %in% 3:6 & looppos > 0 & looppos <= looplen) ,minus1, POS,  looplen, looppos,ss,ssbin) , .) %>%
+left_join(.,xsamp, by="samp") -> POSXD_U
+##########
+HP <- data.frame(hairpin_group = 1:90 ,
+				looplen=c(rep(3, 3*5), rep(4, 4*5), rep(5, 5*5), rep(6, 6*5)),
+				looppos=c(rep(1:3, each = 5), rep(1:4, each = 5), rep(1:5, each = 5), rep(1:6, each = 5)),
+				ssbin=rep(1:5, 18),
+				ss_min=sapply(rep(1:5, 18), function(x) c(0, 5, 8, 12, 16)[x]),
+				ss_max=sapply(rep(1:5, 18), function(x) c(4, 7, 11, 15, Inf)[x])) %>%
+				dplyr::mutate(across(c(looplen,looppos,ssbin), as.factor))
+##########
+POSXD_U %>% 
+drop_na() %>% 
+filter(. , U > 0.03 ) %>% 
+dplyr::mutate(across(c(looplen,looppos,ssbin,stype ), as.factor)) %>% 
+dplyr::group_by(stype, looplen, looppos , ssbin, .drop = FALSE) %>% 
+dplyr::summarise(muts = n()) %>% 
+pivot_wider(names_from = stype, values_from = muts) -> mut_counts
+dplyr::inner_join(mut_counts,HP, by=c("looplen","looppos",'ssbin')) -> HP_mut_counts
+
+write.table(HP_mut_counts,paste0(topdir, "HS1_HS2_mutation_counts.txt"),quote=F,sep="\t",col.names=T,row.names=F)
+############
+# Supplemetary Figure 2
+#### HS1 vs HS2 plot
+d=data.frame(x=rep(c(1,5,5),18)+rep(seq(0,85,5),each=3),
+			 y=rep(c(-575,-575,-560),18),
+			t=rep(1:18,each=3))
+
+HP_mut_counts %>% 
+dplyr::rename("HS1" = "A3A", "HS2" = "A3B_full") %>% 
+mutate(HS2 = HS2 * -1) %>% 
+pivot_longer(cols = c("HS1","HS2"), names_to = "HS", values_to = "value") %>%
+ggplot(aes(x=hairpin_group , y = value, group=ssbin)) +
+geom_col(aes(fill = HS),col="black", linewidth = 0.3 , position = position_dodge(width=0.6)) +
+theme_classic()+
+scale_fill_manual(values = c("#b90806","#3751ff"), labels= c("HS1 (A3A)", "HS2 (A3B)"))+
+labs(x= "Hairpin Loops (Length / Position)", y="Pseudo-Mutation Counts", fill="", title = "Hairpin Signature Values") +
+coord_cartesian(ylim=c(-578,350)) +
+scale_y_continuous(expand = c(0.01,0.01),
+					breaks=seq(-500,500,250),
+					labels=abs(seq(-500,500,250))) +
+scale_x_continuous( expand = c(0.01,0.01), 
+					breaks=seq(3,90,5),
+					labels = paste0(HP_mut_counts$looplen[seq(3,90,5)],'/',HP_mut_counts$looppos[seq(3,90,5)]),
+					 minor_breaks = seq(5,85,5)+0.5)+
+theme(axis.text.x = element_text(angle = 45, hjust = 1),
+	panel.grid.minor.x = element_line(color="grey",size = 0.25, linetype = 1),
+	axis.title = element_text(size=15),
+	plot.title = element_text(size=16),
+	axis.text = element_text(size=14))+
+geom_polygon(data=d, mapping=aes(x=x, y=y, group=t), fill="#291e21")+
+annotate("text", x = 0.5, y = -525, label = "Stem Strength:", size=5, color="#291e21",hjust=0) -> g.2S
+ggsave(paste0(outdir,"Fig2S_HS1_HS2.pdf"),g.2S, height = 6 , width = 12, units = "in")
+###########################################################################
+### import data for figures 5C and 5D
+Tumor_HSA_data <- read.table(paste0(topdir,"Patient_data/3004_Hairpin_Analysis_TpC.txt"),sep="\t",header=T)
+set.seed(1234)
+mutate(Tumor_HSA_data, most_A3A_A3B = factor(
+	ifelse(msupe_neg==1 & frac_apobec>=0.9 & apochar > 0.05, "A3A",
+	ifelse(msupe_neg==1 & frac_apobec>=0.1 & apochar < -0.08, "A3B", "-")),
+	levels = c("A3A","A3B","-")),
+	apobec_frac_Y = log10(0.01+0.01* runif(nrow(Tumor_HSA_data), min = 0, max = 1) + frac_apobec )) -> Tumor_HSA_data
+############################
+### Fig 5C
+Tumor_HSA_data %>% 
+filter(frac_apobec >0.1) %>% 
+arrange((most_A3A_A3B)) %>% 
+mutate(most_A3A_A3B = factor(most_A3A_A3B, levels = c("A3A","A3B","-"))) %>% 
+{ggplot(., aes(x=hs1, y=hs2))+
+geom_point(color="#686b6b",alpha=0.5) +
+geom_point(data=filter(.,most_A3A_A3B!="-"), aes(x=hs1, y=hs2),size=1.8,alpha=1) +
+geom_point(data=filter(.,most_A3A_A3B!="-"), aes(x=hs1, y=hs2, color= most_A3A_A3B),size=1.5,alpha=0.8) +
+geom_abline(intercept=0, slope=1, linetype="dashed", color = "#323237")+
+theme_classic()+
+theme(aspect.ratio = 1,
+plot.title = element_text(size= 17),
+axis.text=element_text(size=14),
+axis.title=element_text(size=17),
+legend.text=element_text(size=13),
+legend.title = element_blank(),
+legend.background = element_rect(linetype = 1, size = 0.7, colour = 1),
+panel.grid.minor = element_blank(),
+legend.position = c(.2,.8))+
+guides(color = guide_legend(override.aes = list(size=2.5)))+
+scale_x_continuous(expand = c(0.01,0),breaks=seq(0,5,1))+
+scale_y_continuous(expand = c(0.01,0),breaks=seq(0,5,1))+
+labs(title = "Patient tumors", x= "Coefficient of HS1 (A3A)", y="Coefficient of HS2 (A3B)",color="")+
+scale_color_manual(limits =c("A3A","A3B" ), values = c("red","blue","#686b6b"),labels=c("A3A-most","A3B-most") )+
+scale_size_manual(values = c(2,2,1),guide=FALSE )+
+coord_cartesian(xlim=c(0,5.5),ylim=c(0,5.5))} -> g.5c
+ggsave(paste0(outdir,"Fig5C_coefficients_HS1_HS2.pdf"), g.5c, height = 7 , width = 7, units = "in")
+
+############################
+### Fig 5D
+filter(Tumor_HSA_data, frac_apobec>=0.1) %>% lm(log2R~apochar, data=.) %>% 
+summary() %>% .$coefficients %>% data.frame() %>% .$Estimate -> lm_line
+filter(Tumor_HSA_data, frac_apobec>=0.1) %>% lm(log2R~apochar, data=.) %>% 
+summary() %>% .$adj.r.squared %>% round(3) ->  adjr2
+#####
+Tumor_HSA_data %>% 
+filter(frac_apobec>=0.1) %>% 
+{ggplot(.,aes(x=apochar , y = log2R))+ 
+geom_vline(xintercept = 0.05, linetype="dashed", color = "#7e7e87")+
+geom_vline(xintercept = -0.08, linetype="dashed", color = "#7e7e87")+
+geom_hline(yintercept = 0, linetype="dashed", color = "#7e7e87")+
+geom_abline(intercept = lm_line[1], slope = lm_line[2],linetype="dotted", color = "#743200", size=1.5)+
+geom_smooth(method="lm", color="#743200",linewidth=1.5, fullrange=TRUE) +
+geom_point(aes(color = frac_apobec),size=2,alpha=0.5)+
+geom_point(data = filter(.,most_A3A_A3B=="A3B" ), aes(x=apochar , y = log2R), color = "blue",alpha=1, size=3)+
+geom_point(data = filter(.,most_A3A_A3B=="A3A" ), aes(x=apochar , y = log2R), color = "#a30007",alpha=1, size=3)+
+geom_point(data = filter(.,most_A3A_A3B!="-" ),aes(color = frac_apobec),size=2,alpha=1)+
+scale_color_gradient(low = "#bfb5b1", high = "#ff1f00", limits = c(0.1,1),breaks=c(.1,.4,.7,1),labels=paste0(c(10,40,70,100),"%"))+
+coord_cartesian(xlim=c(-.19,.19),ylim=c(-5,5))+
+theme_bw()+
+scale_y_continuous(expand = c(0,0),breaks=seq(-5,5,2.5))+
+scale_x_continuous(expand = c(0,0),breaks=seq(-.15,0.15,0.05),
+labels = round(seq(-.15,0.15,0.05),2))+
+labs(title = "",x="A3B \u2190 mutation character \u2192 A3A\n(YTCA/RTCA)\n",y="A3B \u2190 Hairpin Signature \u2192 A3A\nlog2(HS1/HS2)", col="APOBEC\nMutational\nSignature")+
+theme(aspect.ratio = 1,
+legend.position = c(0.815,0.15),
+plot.title = element_text(size= 21),
+axis.title = element_text(family = "helvetica" ,size= 20),
+axis.text = element_text(color="black",size=19),
+legend.background = element_blank(),
+legend.title = element_text(size=15),
+legend.text = element_text(size=15), 
+panel.grid.minor = element_blank())+
+guides(color = guide_colourbar(title.position = "left", 
+                              title.hjust = 0,
+							  barwidth = 1,
+                              label.position = "right"))+
+annotate("text", x = .06 , y = 2.5, label = "A3A-most", fontface =2, size=6,color="#d80000",hjust=0) +
+annotate("text", x = -0.17 , y = -4.2, label = "A3B-most", fontface =2, size=6, color="#0202c3",hjust=0) +
+annotate("text", x = -0.08 , y = 1.5, label =parse(text=paste0("bold(R^2: ",adjr2,")")),fontface =2, size=6,color="#743200",hjust=0) } -> g.5d
+ggsave(paste0(outdir,"Fig5D_Hairpin_Sig_analysis_vs_YTCA_RTCA_new_all.pdf"),g.5d, height = 7 , width = 7, units = "in")
+#########################

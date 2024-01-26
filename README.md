@@ -55,9 +55,25 @@ samtools depth -aa -m 100000 <sample.BH214.bam> ><sample.BH214.depth>
 ________
 ## Hairpin Signature Analysis
 **Run the Hairpin Signature Analysis in MATLAB<br>**
-**The MATLAB code is available at Hairpin_analysis.m inside the Hairpin_Signature_Analysis folder<br>**
+**The example MATLAB code is also available at Hairpin_Signature_Analysis/Hairpin_analysis.m<br>**
+***To Run hairpin_signature_analysis function, the input table(struct) needs the following fields:<br>**
+_ref:_ reference sequence, numeric : A=1, C=2, G=3, T=4<br>
+_alt:_ alternative sequence, numeric : A=1, C=2, G=3, T=4<br>
+_looplen:_ length of the potential hairpin loop<br>
+_looppos:_ position of the cytosine in the potential hairpin loop<br>
+_ss:_ stem strength of the potential hairpin loop<br>
+_minus0:_ base immediately 5' to the cytosine, numeric : A=1, C=2, G=3, T=4<br>
+_patid:_ patient/sample index, numeric (optional)<br>
+
+***A struct with these fields can be created using get_hairpin_info function.<br>**
+***get_hairpin_info function requires path to the reference fasta file, and a table of mutations with the following fields:<br>**
+_chr:_ chromosome<br>
+_pos:_ position of the mutation<br>
+_ref:_ reference sequence, numeric : A/C/G/T or 1/2/3/4<br>
+_alt:_ alternative sequence, numeric : A/C/G/T or 1/2/3/4<br><br>
+***samtools must be available at the system level to run get_hairpin_info function<br>** 
+***Alternatively, one can extract the hairpin informations from the output of ApoHP tool**
 ***Dependency functions are available at the Hairpin_Signature_Analysis folder<br>**
-***samtools must be available at the system level<br>** 
 
 ```
 ## in bash:
@@ -94,9 +110,9 @@ addpath(cd /path/to/matlab_functions/Hairpin_Signature_Analysis)
 <br>
 
 **Note:** <br>
-For large number of mutations it's faster to servey the entire genome for hairpins.<br>
+For large number of mutations it might be faster to servey the entire genome for hairpins.<br>
 Then map the mutations to the hairpins sites and extract looplen, looppos and ss values.<br>
-See https://github.com/alangenb/ApoHP for genome hairpin analysis tool
+See [https://github.com/alangenb/ApoHP](https://github.com/alangenb/ApoHP) for ApoHP: APOBEC hairpins analysis tool
 
 ________________
 ### If you have any questions regarding the article or the code behind it, please contact the corresponding author or Ramin Sakhtemani rsakhtemani (at) mgh.harvard.edu
