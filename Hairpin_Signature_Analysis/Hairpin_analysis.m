@@ -26,7 +26,7 @@ Hairpins = get_hairpin_info(M,ref_fasta); % about 40 minutes
 Hairpins.pat_id = arrayfun(@(x) str2num(x{1}), Hairpins.pat_id);
 HSA = hairpin_signature_analysis(Hairpins,true); %% second argument for filtering only TpC sites.
 % >> pr(HSA.pat)
-% pat_id hs1   hs2   log2R   judgement
+% pat_id hs1   hs2   log2R   judgment
 % 1      0.046 0.037 0.33    A3A-like 
 % 2      0.014 0.021 -0.56   A3B-like 
 % 13     0.019 0.019 -0.0039 -        

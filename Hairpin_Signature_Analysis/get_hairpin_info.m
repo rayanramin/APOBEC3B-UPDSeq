@@ -4,8 +4,8 @@ function OUT = get_hairpin_info(M , ref_fasta)
 		error('M must be a struct')
 	end
 	%%% check if M has the right fields (chr, pos, ref, alt)
-	if ~all(isfield(M,{'chr','pos','ref'}))
-		error('M must have the fields chr, pos, ref' )
+	if ~all(isfield(M,{'chr','pos','ref','alt'}))
+		error('M must have the fields chr, pos, ref, alt' )
 	end
 	%%% check if M.chr is a cell array of strings
 	if ~iscellstr(M.chr)

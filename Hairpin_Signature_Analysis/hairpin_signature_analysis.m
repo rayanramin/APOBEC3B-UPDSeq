@@ -124,9 +124,9 @@ function OUT =  hairpin_signature_analysis(X, only_TpC)
 	OUT.pat.hs1 = N(:,1);
 	OUT.pat.hs2 = N(:,2);
 	OUT.pat.log2R = r;
-	OUT.pat.judgement=repmat({'-'} ,length(OUT.pat.pat_id),1);
-	OUT.pat.judgement(r>threshold & nC2GT >= min_nC & tc_frac >= min_tc_frac) = {'A3A-like'};
-	OUT.pat.judgement(r< -threshold & nC2GT >= min_nC & tc_frac >= min_tc_frac) = {'A3B-like'};
+	OUT.pat.judgment=repmat({'-'} ,length(OUT.pat.pat_id),1);
+	OUT.pat.judgment(r>threshold & nC2GT >= min_nC & tc_frac >= min_tc_frac) = {'A3A-like'};
+	OUT.pat.judgment(r< -threshold & nC2GT >= min_nC & tc_frac >= min_tc_frac) = {'A3B-like'};
 
 	OUT.counts = C;
 	OUT.HP = HP;
