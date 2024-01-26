@@ -65,15 +65,17 @@ _ss:_ stem strength of the potential hairpin loop<br>
 _minus0:_ base immediately 5' to the cytosine, numeric : A=1, C=2, G=3, T=4<br>
 _patid:_ patient/sample index, numeric (optional)<br>
 
-***A struct with these fields can be created using get_hairpin_info function.<br>**
+***To extract the hairpin information and create a table with the above fields, you can use get_hairpin_info function.<br>**
 ***get_hairpin_info function requires path to the reference fasta file, and a table of mutations with the following fields:<br>**
 _chr:_ chromosome<br>
 _pos:_ position of the mutation<br>
 _ref:_ reference sequence, numeric : A/C/G/T or 1/2/3/4<br>
 _alt:_ alternative sequence, numeric : A/C/G/T or 1/2/3/4<br><br>
 ***samtools must be available at the system level to run get_hairpin_info function<br>** 
-***Alternatively, one can extract the hairpin informations from the output of ApoHP tool**
+***Alternatively, one can extract the hairpin informations from the output of ApoHP tool<br>**
 ***Dependency functions are available at the Hairpin_Signature_Analysis folder<br>**
+
+### Try the functions on the test mutations:<br>
 
 ```
 ## in bash:
