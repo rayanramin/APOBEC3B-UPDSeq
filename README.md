@@ -129,4 +129,4 @@ A nested struct which contains:<br>
 - _counts:_ The count matrix (nx90) of mutations used in the directed NMF<br>
 - _HP:_ information about the 90 hairpin groups used in the analysis and HS1 and HS2 values.<br>
 ________________
-### If you have any questions regarding the article or the code behind it, please contact the corresponding author or Ramin Sakhtemani rsakhtemani (at) mgh.harvard.edu
+#### If you have any questions regarding the article or the code behind it, please contact the corresponding author or Ramin Sakhtemani rsakhtemani (at) mgh.harvard.edu
